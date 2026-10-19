@@ -44,7 +44,6 @@ header_pages:
   - about.md
   - guides.md
   - author.md
-  - blog.md
 
 date_format: "%B %-d, %Y"
 

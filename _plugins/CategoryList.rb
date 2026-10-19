@@ -9,6 +9,12 @@ module Jekyll
   # author (see _plugins/Authors.rb, `category_page: true`) counts too, even
   # though the mirror writes it.
   #
+  # A listing-only category (see PluginUtils::LISTING_CATEGORIES) works the same
+  # way without touching this module: _posts.md at the site root hosts "_posts",
+  # so every post declaring `categories: [_posts]` is listed on /_posts.html.
+  # Jekyll drops files starting with "_", which is why allow_listing_pages adds
+  # those page names to site.include before the site is read.
+  #
   # A category page lists:
   #   - its direct sub categories, linked to their category pages;
   #   - the pages that live directly in <category>/ and every post whose
@@ -45,6 +51,19 @@ module Jekyll
         return "" if items.empty?
 
         %(<ul class="category-list">#{items.join}</ul>)
+      end
+
+      # Jekyll skips every entry whose name starts with "_", so a listing page
+      # such as _posts.md has to be added to site.include explicitly. Only the
+      # page file names are included, never the bare directory, so the post
+      # sources stay in the collection where they belong.
+      def allow_listing_pages(site)
+        return if site.nil?
+
+        files = Jekyll::PluginUtils::LISTING_CATEGORIES.flat_map do |id|
+          %W[#{id}.md #{id}.markdown]
+        end
+        site.include = (Array(site.include) + files).uniq
       end
 
       # Categories in use for the current build, memoised per site.
@@ -96,7 +115,7 @@ module Jekyll
         (site.pages + site.posts.docs).each do |doc|
           Jekyll::PluginUtils.normalize_list(doc.data["categories"]).each do |raw|
             id = Jekyll::PluginUtils.category_normalize(raw)
-            next if id.nil? || !Jekyll::PluginUtils.category_valid?(id)
+            next if id.nil? || !Jekyll::PluginUtils.category_listable?(id)
 
             ids[id] = true
             # An ancestor only needs a page to be listable as a sub category.
@@ -278,6 +297,10 @@ module Jekyll
 end
 
 Liquid::Template.register_tag("category_list", Jekyll::CategoryList::Tag)
+
+Jekyll::Hooks.register :site, :after_reset do |site|
+  Jekyll::CategoryList.allow_listing_pages(site)
+end
 
 Jekyll::Hooks.register :pages, :pre_render do |page, _payload|
   Jekyll::CategoryList.inject(page)

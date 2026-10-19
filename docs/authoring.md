@@ -132,6 +132,29 @@ Three rules apply:
 A category page is a navigation hub: it is not part of a chapter, so it never
 gets previous/next links or a chapter root of its own.
 
+### Posts index (`_posts.md`)
+
+`_posts.md` in the site root is the category page of the listing-only category
+`_posts`, so it collects every post that declares `categories: [_posts]`,
+newest first:
+
+```markdown
+---
+layout: page
+title: Posts
+main_part: 4
+---
+```
+
+- The file is published at `/_posts.html`; `main_part` puts it in the home page
+  "Sections" list.
+- `_posts` can be listed but is never a valid mirror target, so nothing is ever
+  written into the `_posts/` collection directory.
+- Jekyll drops every entry whose name starts with `_`. The plugin adds
+  `_posts.md` and `_posts.markdown` to `site.include` before the site is read, so
+  the page works without editing `_config.yml`.
+- Only `_posts` itself is supported; nested ids such as `_posts/tech` are not.
+
 ## Author profiles
 
 Every author creates `author.md` with `categories: [author]`:
@@ -197,8 +220,10 @@ the build logs a warning otherwise.
 
 - `_posts/**` is mirrored to `_posts/<author>/**` and behaves like a normal
   Jekyll post.
-- With `categories: [blog]` and the default permalink, posts are published at
-  `/blog/<title>.html`.
+- With `categories: [_posts]` and the default permalink, posts are published at
+  `/_posts/<title>.html` and collected on the `/_posts.html` index page (see
+  below). Use `[_posts]` on its own: a second category would be prepended to the
+  URL (`/blog/_posts/<title>.html`).
 - Post filenames do not need a date: the plugin prefixes the front matter
   `date` (or `modified_date`, or the file modification time).
 - `tags:` generates `/tags/<tag>.html` index pages and tag chips in the footer.
@@ -242,6 +267,6 @@ Any file that is not a page with front matter (images, PDFs, ...) is mirrored to
 
 1. Delete `authors-src/alice/` and `authors-src/bob/` (or replace them).
 2. Delete `guides/overview.md`.
-3. Remove or rename `author.md`, `guides.md`, `blog.md` and update `header_pages`
-   in `_config.yml`.
+3. Remove or rename `author.md`, `guides.md` and update `header_pages` in
+   `_config.yml`. Keep `_posts.md` if you want a posts index.
 4. Replace the text in `index.md` and `about.md`.

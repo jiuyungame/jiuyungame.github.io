@@ -1,7 +1,7 @@
 ---
 layout: post
 title: Work in progress
-categories: [blog]
+categories: [_posts]
 ---
 
 Drafts are mirrored to `_drafts/<author>/` and are only built when Jekyll runs

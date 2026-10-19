@@ -7,6 +7,11 @@ module Jekyll
     # own structure).
     CATEGORY_RESERVED = %w[tmp authors authors-src].freeze
 
+    # Category ids that exist for listing only. They may carry a category page
+    # and be matched by CategoryList, but they are never a valid mirror target,
+    # so nothing can be written into a directory that Jekyll reserves.
+    LISTING_CATEGORIES = %w[_posts].freeze
+
     # Normalise a front matter list (categories / tags) into an array of
     # non-empty, unique strings.
     #
@@ -88,6 +93,16 @@ module Jekyll
       return false if id.nil?
 
       id.split("/").all? { |seg| category_segment_ok?(seg) }
+    end
+
+    # True when the value can be used to group documents into a list. Wider than
+    # category_valid?: the listing only categories (see LISTING_CATEGORIES) are
+    # listable but never a valid mirror target.
+    def category_listable?(value)
+      id = category_normalize(value)
+      return false if id.nil?
+
+      LISTING_CATEGORIES.include?(id) || category_valid?(id)
     end
 
     # "guides/advanced" -> "guides"; top level -> nil.

@@ -17,7 +17,7 @@ block and a `mathjax` switch on top of standard Jekyll options.
 | `baseurl` | empty | Set for project pages (`/my-repo`) |
 | `url` | empty | Canonical site URL (`https://example.com`) |
 | `permalink` | `/:categories/:title:output_ext` | Post URLs; pages keep their path |
-| `header_pages` | `about.md`, `guides.md`, `author.md`, `blog.md` | Top navigation |
+| `header_pages` | `about.md`, `guides.md`, `author.md` | Top navigation |
 | `date_format` | `%B %-d, %Y` | Dates in headers and the sidebar |
 | `mathjax` | `false` | Include MathJax on every page |
 | `google_analytics` | unset | Enables the analytics include when set |
@@ -63,6 +63,13 @@ The list contains the direct sub categories first, then the pages directly under
 whose categories match (newest first), linked by title. Deeper pages are not
 repeated in the parent list. Disable it per page with `category_list: false`, or
 place `{% category_list %}` / `{% category_list guides/advanced %}` manually.
+
+`_posts` is a listing-only category: `_posts.md` in the site root hosts it, so
+every post declaring `categories: [_posts]` is listed on `/_posts.html`. Being
+listing-only, it can never be a mirror target — nothing is written into the
+`_posts/` collection directory. Because Jekyll skips entries starting with `_`,
+the plugin also adds `_posts.md` / `_posts.markdown` to `site.include` before the
+site is read.
 
 ### CategoryOrder (`_plugins/CategoryOrder.rb`)
 
@@ -112,12 +119,19 @@ repeated separators, backslashes treated as separators, reserved names and
 Windows-invalid characters rejected, plus the helpers for parent, ancestors,
 depth and the primary category of a document.
 
+`LISTING_CATEGORIES` (`_posts`) is the one exception: `category_listable?` accepts
+those ids for grouping documents into a list, while the stricter
+`category_valid?` still rejects them, which is what keeps them out of the mirror
+targets and out of chapter chains.
+
 ## Build pipeline
 
 For every build (`jekyll build`, and every rebuild in `jekyll serve`):
 
 1. `:site, :after_reset` — `Authors.mirror` copies author content into place,
-   excludes the author folder from the output and records the manifest.
+   excludes the author folder from the output and records the manifest;
+   `CategoryList.allow_listing_pages` adds the `_`-prefixed listing pages to
+   `site.include` so Jekyll reads them.
 2. `read` — Jekyll reads the mirrored pages, posts, layouts and includes.
 3. `:site, :post_read` — every category copy's `page.categories` is narrowed to
    its own category, so CategoryOrder and DefaultLicense see one copy per

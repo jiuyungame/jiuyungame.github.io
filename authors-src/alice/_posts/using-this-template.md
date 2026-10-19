@@ -2,7 +2,7 @@
 layout: post
 title: Using this template
 author: Alice
-categories: [blog]
+categories: [_posts]
 tags: [guide]
 date: 2025-02-01
 modified_date: 2025-02-10
@@ -17,4 +17,4 @@ A few things to try after cloning the template:
 1. Run `bundle install` and `bundle exec jekyll serve`.
 2. Change the site title and author details in `_config.yml`.
 3. Add your own folder under `authors-src/` with an `author.md` and some pages.
-4. Edit or remove the demo category pages (`author.md`, `guides.md`, `blog.md`).
+4. Edit or remove the demo category pages (`author.md`, `guides.md`).

@@ -2,7 +2,7 @@
 layout: post
 title: Hello World
 author: Alice
-categories: [blog]
+categories: [_posts]
 tags: [welcome, jekyll]
 date: 2025-01-15
 ---
