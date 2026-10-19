@@ -22,18 +22,28 @@ module Jekyll
   #     _data/**                       -> _data/<author>/**
   #     _plugins/**                    -> skipped (plugins load before the mirror)
   #
-  # Category rules (category pages are maintained by the site owner):
-  #   - A category is usable only when the site root contains a category page
-  #     named after it: <category>.md, .markdown, .html or .htm.
+  # Category rules:
+  #   - A category is usable only when its category page exists: <category>.md,
+  #     .markdown, .html or .htm, relative to the site root.
   #     Copies for missing categories are skipped with a warning; when none of a
   #     page's categories is usable the page falls back to authors/<author>/...
-  #   - Categories are single level: categories: [math, functions] produces
-  #     math/<title>.md and functions/<title>.md, never math/functions/.
+  #   - Categories nest through a slash path: categories: [guides/advanced]
+  #     produces guides/advanced/<title>.md and its category page is
+  #     guides/advanced.md. categories: [math, functions] still produces two
+  #     sibling copies.
+  #   - An author can provide a category page from their own folder by setting
+  #     `category_page: true`. The category comes from `categories` or, when
+  #     that is absent, from the folder path below the author folder:
+  #       <author>/guides/advanced/index.md -> guides/advanced.md
+  #     Only nested categories are accepted (owners create the top level), the
+  #     file produces no member copy of its own category, and a category page
+  #     maintained by the site owner always wins.
   #   - <title> is the front matter `title` run through Jekyll's slugify
   #     (Unicode is preserved); when it is missing or empty the source filename
   #     is used. The source extension is kept.
   #   - While a copy is rendered its page.categories are narrowed to that copy's
   #     category, so CategoryOrder / DefaultLicense never see the same page twice.
+  #     Category pages are never narrowed.
   #   - Author pages are ordinary category pages: a page with
   #     `categories: [author]` lands in author/<title>.md, provided the site
   #     owner created author.md. There is no special-casing of author.md.
@@ -59,9 +69,8 @@ module Jekyll
       "keep_mirror" => false,
     }.freeze
 
-    MANIFEST_NAME       = "authors-mirror.json"
-    CATEGORY_FILE_EXTS  = %w[.md .markdown .html .htm].freeze
-    RESERVED_CATEGORIES = %w[tmp authors authors-src].freeze
+    MANIFEST_NAME      = "authors-mirror.json"
+    CATEGORY_FILE_EXTS = %w[.md .markdown .html .htm].freeze
 
     POST_DIR    = "_posts"
     DRAFT_DIR   = "_drafts"
@@ -75,12 +84,24 @@ module Jekyll
         @registry ||= {}
       end
 
+      # Category pages this build took from an author folder, as
+      # { relative path => category id }. CategoryList and friends treat these
+      # files as category pages even though they are mirrored, not committed.
+      def provided_category_pages
+        @provided_category_pages ||= {}
+      end
+
       # :site, :after_reset hook. Runs before the site is read, on every build
       # (including `jekyll serve` rebuilds).
+      #
+      # Two passes: the first collects what every author file declares, so a
+      # category page provided by an author counts as usable even though it does
+      # not exist on disk yet; the second maps the files.
       def mirror(site)
         cfg = config_for(site)
         src = source_dir(site, cfg)
         @page_dir = cfg["page_dir"].to_s
+        @provided_category_pages = {}
         warn_legacy_source(site, cfg, src)
 
         expected = {}
@@ -89,6 +110,8 @@ module Jekyll
         authors = []
         skipped = []
         report = {}
+        previous = read_manifest(site)
+        plan = empty_plan
 
         if src && File.directory?(src)
           hide_source!(site, src)
@@ -96,26 +119,28 @@ module Jekyll
           authors = author_dirs(src)
           authors.each { |author| warn_unsafe_author(author) }
 
-          authors.each do |author|
-            each_file(File.join(src, author)) do |rel, abs|
-              data = front_matter(abs, site)
-              targets = targets_for(author, rel, abs, cfg, site, data, report)
-              if targets.nil?
-                skipped << posix_join(author, rel)
+          entries = author_entries(src, authors, site)
+          plan = build_plan(entries, site, previous, report)
+
+          entries.each do |entry|
+            author = entry[:author]
+            targets = targets_for(author, entry[:rel], entry[:abs], cfg, site,
+                                  entry[:data], report, plan)
+            if targets.nil?
+              skipped << posix_join(author, entry[:rel])
+              next
+            end
+            targets.each do |target_entry|
+              target = target_entry[:target]
+              if expected.key?(target)
+                Jekyll.logger.warn "Authors:",
+                                   "Duplicate mapping target, skipping " \
+                                   "#{posix_join(author, entry[:rel])} -> #{target}"
                 next
               end
-              targets.each do |entry|
-                target = entry[:target]
-                if expected.key?(target)
-                  Jekyll.logger.warn "Authors:",
-                                     "Duplicate mapping target, skipping " \
-                                     "#{posix_join(author, rel)} -> #{target}"
-                  next
-                end
-                expected[target] = abs
-                mapping[target] = author
-                target_categories[target] = entry[:category]
-              end
+              expected[target] = entry[:abs]
+              mapping[target] = author
+              target_categories[target] = target_entry[:category]
             end
           end
         end
@@ -128,12 +153,12 @@ module Jekyll
                              "#{skipped.first(3).join(', ')}#{skipped.size > 3 ? ' ...' : ''}"
         end
 
-        previous = read_manifest(site)
         owned = sync(site, expected, previous)
         write_manifest(site, owned)
 
         routed = owned.keys.count { |rel| target_categories[rel] }
         @registry = mapping.select { |rel, _author| owned.key?(rel) }
+        @provided_category_pages = plan[:author_paths].select { |rel, _id| owned.key?(rel) }
         @category_by_target = target_categories.select { |rel, cat| cat && owned.key?(rel) }
         track(site, owned, cfg)
 
@@ -142,6 +167,10 @@ module Jekyll
           unless routed.zero?
             categories = @category_by_target.values.uniq.first(3).join(", ")
             message += ", #{routed} category copy(ies) (#{categories})"
+          end
+          unless @provided_category_pages.empty?
+            ids = @provided_category_pages.values.uniq.first(3).join(", ")
+            message += ", #{@provided_category_pages.size} category page(s) (#{ids})"
           end
           Jekyll.logger.info "Authors:", message
         end
@@ -183,51 +212,76 @@ module Jekyll
         registry[key] || author_from_path(key)
       end
 
-      # Pure function: targets for one source file (nil = skip the whole file).
-      # Returns [{ :target => relative path, :category => category or nil }, ...].
-      def targets_for(author, rel, abs_path = nil, cfg = DEFAULTS, site = nil, data = nil, report = nil)
+      # Targets for one source file (nil = skip the whole file).
+      # Returns [{ :target => relative path, :category => category or nil,
+      #            :category_page => category id or nil }, ...].
+      #
+      # `plan` carries the two-pass build state (see build_plan); without it the
+      # function falls back to the single-pass behaviour of asking the disk.
+      def targets_for(author, rel, abs_path = nil, cfg = DEFAULTS, site = nil,
+                      data = nil, report = nil, plan = nil)
         cfg = DEFAULTS.merge(cfg || {})
         report ||= {}
         rel = normalize_rel(rel)
         top, rest = rel.split("/", 2)
+        fallback = [{ :target => posix_join(cfg["page_dir"].to_s, author, rel),
+                      :category => nil }]
 
         if !rest.nil? && top.start_with?("_")
           return nil if top == PLUGIN_DIR
 
-          return [{ :target => underscore_target(author, top, rest, abs_path, site, data), :category => nil }]
+          target = underscore_target(author, top, rest, abs_path, site, data)
+          return [{ :target => target, :category => nil }]
+        end
+
+        if !plan.nil? && Jekyll::PluginUtils.category_page_flag?(data)
+          key = posix_join(author, rel)
+          id = plan[:accepted][key]
+          if id
+            return [{ :target => "#{id}#{File.extname(rel)}", :category => nil,
+                      :category_page => id }]
+          end
+
+          (report[:cp_fallback] ||= {})[key] = true
+          return fallback
         end
 
         categories = categories_of(data, report)
         unless categories.empty?
           usable = []
-          categories.each do |category|
-            if category_name_ok?(category)
-              if category_page_file(site, category)
-                usable << category
-              else
-                (report[:missing] ||= {})[category] = true
-              end
+          categories.each do |raw|
+            id = Jekyll::PluginUtils.category_normalize(raw)
+            if id.nil? || !Jekyll::PluginUtils.category_valid?(id)
+              (report[:invalid] ||= {})[raw.to_s] = true
+              next
+            end
+
+            available = plan.nil? ? !category_page_file(site, id).nil? : plan[:usable].key?(id)
+            if available
+              usable << id
             else
-              (report[:invalid] ||= {})[category] = true
+              (report[:missing] ||= {})[id] = true
             end
           end
 
           unless usable.empty?
             slug = title_slug(data, rel, site)
             if slug
-              return usable.map do |category|
+              members = usable.map do |id|
                 {
-                  :target   => posix_join(category, "#{slug}#{File.extname(rel)}"),
-                  :category => category,
+                  :target   => posix_join(id, "#{slug}#{File.extname(rel)}"),
+                  :category => id,
                 }
               end
+              members = drop_shadowed(members, plan, report)
+              return members unless members.empty?
             end
           end
 
           report[:fallback] = report.fetch(:fallback, 0) + 1
         end
 
-        [{ :target => posix_join(cfg["page_dir"].to_s, author, rel), :category => nil }]
+        fallback
       end
 
       # Called from at_exit: delete files written by this build and prune empty
@@ -324,6 +378,159 @@ module Jekyll
         end
       end
 
+      # -------------------------------------------------------------------
+      # Two-pass planning
+      # -------------------------------------------------------------------
+
+      def empty_plan
+        { :usable => {}, :claims => {}, :accepted => {},
+          :page_paths => {}, :author_paths => {} }
+      end
+
+      # Every author file with its front matter, read once for both passes.
+      def author_entries(src, authors, site)
+        entries = []
+        authors.each do |author|
+          each_file(File.join(src, author)) do |rel, abs|
+            entries << {
+              :author => author,
+              :rel    => rel,
+              :abs    => abs,
+              :data   => front_matter(abs, site),
+            }
+          end
+        end
+        entries
+      end
+
+      # Decide which categories are usable and which author files become
+      # category pages. Runs before anything is written, so a category page
+      # provided by an author is known before the copies that need it.
+      def build_plan(entries, site, previous, report)
+        plan = empty_plan
+
+        entries.each do |entry|
+          next unless entry[:data].is_a?(Hash)
+
+          declared_ids(entry[:data]).each { |id| plan[:usable][id] = true }
+
+          next unless Jekyll::PluginUtils.category_page_flag?(entry[:data])
+
+          if special_dir?(entry[:rel])
+            (report[:cp_special] ||= {})[posix_join(entry[:author], entry[:rel])] = true
+            next
+          end
+
+          key = posix_join(entry[:author], entry[:rel])
+          id, others = category_page_id(entry[:rel], entry[:data])
+
+          if id.nil?
+            (report[:cp_no_id] ||= {})[key] = true
+            next
+          end
+          unless Jekyll::PluginUtils.category_valid?(id)
+            (report[:cp_invalid] ||= {})[id] = true
+            next
+          end
+          if Jekyll::PluginUtils.category_depth(id) < 2
+            (report[:cp_top_level] ||= {})[id] = true
+            next
+          end
+
+          (report[:cp_multi] ||= {})[id] = true unless others.empty?
+
+          owner = owner_category_page_rel(site, id, previous)
+          if owner
+            (report[:cp_owner] ||= {})[id] = owner
+            next
+          end
+
+          if plan[:claims].key?(id)
+            (report[:cp_duplicate] ||= {})[id] = plan[:claims][id][:author]
+            next
+          end
+
+          plan[:claims][id] = entry
+          plan[:accepted][key] = id
+          plan[:usable][id] = true
+        end
+
+        # A declared category is only usable when a category page exists for it:
+        # either the owner's file or an author provided one.
+        plan[:usable].delete_if do |id, _flag|
+          next false if plan[:claims].key?(id)
+
+          owner_category_page_rel(site, id, previous).nil?
+        end
+
+        plan[:usable].each_key do |id|
+          owner = owner_category_page_rel(site, id, previous)
+          if owner
+            plan[:page_paths][owner] = id
+          elsif (claim = plan[:claims][id])
+            rel = "#{id}#{File.extname(claim[:rel])}"
+            plan[:page_paths][rel] = id
+            plan[:author_paths][rel] = id
+          end
+        end
+
+        plan
+      end
+
+      # _posts/, _drafts/ and friends: `category_page` does not apply there.
+      def special_dir?(rel)
+        top, rest = normalize_rel(rel).split("/", 2)
+        !rest.nil? && top.start_with?("_")
+      end
+
+      # Category an author provided category page belongs to: the front matter
+      # first, then the folder path below the author folder.
+      def category_page_id(rel, data)
+        primary, others = Jekyll::PluginUtils.primary_category(data["categories"])
+        return [primary, others] unless primary.nil?
+
+        dir = File.dirname(normalize_rel(rel))
+        return [nil, []] if dir == "." || dir.empty?
+
+        [Jekyll::PluginUtils.category_normalize(dir), []]
+      end
+
+      # Valid categories declared by a file's front matter.
+      def declared_ids(data)
+        raw = data["categories"]
+        raw = data["category"] if raw.nil?
+        Jekyll::PluginUtils.normalize_list(raw).filter_map do |value|
+          id = Jekyll::PluginUtils.category_normalize(value)
+          id if id && Jekyll::PluginUtils.category_valid?(id)
+        end.uniq
+      end
+
+      # Existing category page maintained outside the mirror. Manifest entries
+      # are left over mirrors, not owner content.
+      def owner_category_page_rel(site, id, previous)
+        return nil if site.nil? || id.nil?
+
+        CATEGORY_FILE_EXTS.each do |ext|
+          rel = "#{id}#{ext}"
+          next if previous.key?(rel)
+
+          return rel if File.file?(site.in_source_dir(rel))
+        end
+        nil
+      end
+
+      # A member copy must never land on a category page path.
+      def drop_shadowed(members, plan, report)
+        return members if plan.nil?
+
+        members.reject do |member|
+          next false unless plan[:page_paths].key?(member[:target])
+
+          (report[:shadowed] ||= {})[member[:target]] = true
+          true
+        end
+      end
+
       def underscore_target(author, top, rest, abs_path, site, data)
         name = File.basename(rest)
         dir = File.dirname(rest)
@@ -345,21 +552,8 @@ module Jekyll
         Jekyll::PluginUtils.normalize_list(raw)
       end
 
-      # Single level, path-safe directory name: no separators, does not start
-      # with _ or ., not a reserved name, no characters Windows rejects.
-      def category_name_ok?(category)
-        return false if category.nil? || category.empty?
-        return false if category == "." || category == ".."
-        return false if category.start_with?("_", ".")
-        return false if category.include?("/") || category.include?("\\")
-        return false if category.match?(%r![<>:"|?*\x00-\x1f]!)
-        return false if category.end_with?(" ", ".")
-        return false if RESERVED_CATEGORIES.include?(category)
-
-        true
-      end
-
-      # A category page is a single file at the site root, named after the category.
+      # A category page is named after the category id, so nesting works the
+      # same way as for single level categories: guides/advanced.md.
       def category_page_file(site, category)
         return nil if site.nil?
 
@@ -388,6 +582,10 @@ module Jekyll
       end
 
       # Sync: remove stale mirrors, then copy new/changed files (sha256 ownership).
+      #
+      # A file the manifest does not list was not created by this plugin, so it
+      # is never written to and never claimed: claiming it would make at_exit
+      # delete somebody else's file later on.
       def sync(site, expected, previous)
         stale = previous.keys - expected.keys
         stale.each { |rel| remove_target(site, rel, previous[rel]) }
@@ -406,8 +604,6 @@ module Jekyll
                 else
                   Jekyll.logger.warn "Authors:", "Target was modified externally, skipping #{rel}"
                 end
-              elsif same_content?(src_path, dst)
-                owned[rel] = digest_of(src_path)
               else
                 Jekyll.logger.warn "Authors:",
                                    "Target exists and is not managed by this plugin, skipping " \
@@ -448,12 +644,6 @@ module Jekyll
       def write_copy(src, dst)
         FileUtils.mkdir_p(File.dirname(dst))
         FileUtils.cp(src, dst, :preserve => true)
-      end
-
-      def same_content?(src, dst)
-        File.size(src) == File.size(dst) && FileUtils.compare_file(src, dst)
-      rescue StandardError
-        false
       end
 
       def digest_of(path)
@@ -559,7 +749,8 @@ module Jekyll
           shown = missing.first(3).join(", ")
           more = missing.size > 3 ? " and #{missing.size - 3} more" : ""
           Jekyll.logger.warn "Authors:",
-                             "Category page missing (create <category>.md at the site root): " \
+                             "Category page missing (create <category>.md, or set " \
+                             "category_page: true on an author file): " \
                              "#{shown}#{more}; related copies were skipped"
         end
 
@@ -579,6 +770,69 @@ module Jekyll
           Jekyll.logger.warn "Authors:",
                              "#{fallback} page(s) fell back to authors/<author>/... " \
                              "(no usable category or empty title)"
+        end
+
+        log_category_page_report(report)
+      end
+
+      # Warnings for the `category_page: true` switch.
+      def log_category_page_report(report)
+        top_level = (report[:cp_top_level] || {}).keys.sort
+        unless top_level.empty?
+          Jekyll.logger.warn "Authors:",
+                             "Top level category pages are created by the site owner, not by " \
+                             "authors; category_page: true ignored for: " \
+                             "#{top_level.first(3).join(', ')}"
+        end
+
+        owner = (report[:cp_owner] || {})
+        unless owner.empty?
+          shown = owner.first(3).map { |id, rel| "#{id} (#{rel})" }.join(", ")
+          Jekyll.logger.warn "Authors:",
+                             "Category page is maintained by the site owner, author copy " \
+                             "falls back to authors/<author>/...: #{shown}"
+        end
+
+        duplicate = (report[:cp_duplicate] || {})
+        unless duplicate.empty?
+          shown = duplicate.first(3).map { |id, author| "#{id} (kept #{author})" }.join(", ")
+          Jekyll.logger.warn "Authors:",
+                             "Another author already provides this category page: #{shown}"
+        end
+
+        no_id = (report[:cp_no_id] || {}).keys.sort
+        unless no_id.empty?
+          Jekyll.logger.warn "Authors:",
+                             "category_page: true without a category and without a folder path " \
+                             "to take one from: #{no_id.first(3).join(', ')}"
+        end
+
+        invalid = (report[:cp_invalid] || {}).keys.sort
+        unless invalid.empty?
+          Jekyll.logger.warn "Authors:",
+                             "Invalid category for category_page: true, skipped: " \
+                             "#{invalid.first(3).join(', ')}"
+        end
+
+        special = (report[:cp_special] || {}).keys.sort
+        unless special.empty?
+          Jekyll.logger.warn "Authors:",
+                             "category_page: true does not apply inside _posts/ or _drafts/: " \
+                             "#{special.first(3).join(', ')}"
+        end
+
+        multi = (report[:cp_multi] || {}).keys.sort
+        unless multi.empty?
+          Jekyll.logger.warn "Authors:",
+                             "A category page should declare one category; using the deepest: " \
+                             "#{multi.first(3).join(', ')}"
+        end
+
+        shadowed = (report[:shadowed] || {}).keys.sort
+        unless shadowed.empty?
+          Jekyll.logger.warn "Authors:",
+                             "Copies skipped because the target is a category page: " \
+                             "#{shadowed.first(3).join(', ')}"
         end
       end
 

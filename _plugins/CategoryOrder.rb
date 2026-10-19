@@ -4,22 +4,32 @@ require 'cgi'
 module Jekyll
   # Orders pages inside a category and renders chapter navigation.
   #
-  # Pages that share a category and declare an `order` in their front matter are
-  # put into one sequence (posts keep Jekyll's own date based neighbours, see
-  # _layouts/post.html):
+  # Categories nest (guides/advanced). Each document joins exactly one chapter:
+  # its primary category, the deepest one it declares. A document that declares
+  # several categories still appears in every category's member list (see
+  # _plugins/CategoryList.rb) but only gets previous/next links from one chain,
+  # so the single-valued navigation data can never be written twice.
+  #
+  # Pages that share a category and declare an `order` are put into one sequence
+  # (posts keep Jekyll's own date based neighbours, see _layouts/post.html):
   #   - `order` accepts hierarchical numbers such as 2, 2.1, 2.2.1; segments are
   #     compared one by one, so 1.10 sorts after 1.2;
   #   - a document with `order: 0` is the chapter root: every other member gets
   #     data['root'] pointing at it (the "Back to category" link) and
   #     data['parent'] pointing at its nearest ancestor (the "Back to parent"
   #     link). The root itself is not part of the prev/next chain but receives
-  #     data['toc_html'] for the whole chapter;
+  #     data['toc_html'] for the whole chapter, plus an entry per sub category;
+  #   - the root of a sub category also gets data['parent'] pointing at the
+  #     category page of its parent category;
   #   - a document whose order is a prefix of other members' orders (1 for 1.1,
   #     1.2) also receives a nested data['toc_html'] for those descendants; its
   #     own position in the chain is unchanged;
   #   - members are chained in ascending order into data['prev'] / data['next'],
   #     rendered by _includes/page-nav.html; the table of contents is rendered by
   #     the layouts from page.toc_html.
+  #
+  # Category pages are navigation hubs, not chapter members: they are skipped
+  # here and never receive prev/next/root/toc data.
   #
   # Category pages also use the order when listing their members, see
   # _plugins/CategoryList.rb.
@@ -30,17 +40,21 @@ module Jekyll
     def generate(site)
       groups = Hash.new { |h, k| h[k] = [] }
       site.pages.each do |doc|
-        Jekyll::PluginUtils.normalize_list(doc.data['categories']).each do |cat|
-          groups[cat] << doc
-        end
+        next if Jekyll::CategoryList.category_page?(doc, site)
+
+        primary, others = Jekyll::PluginUtils.primary_category(doc.data['categories'])
+        next if primary.nil?
+
+        warn_ambiguous_chain(doc, primary, others)
+        groups[primary] << doc
       end
 
-      groups.each_value do |members|
-        members.select! { |doc| !doc.data['order'].nil? }
-        next if members.empty?
+      groups.each do |category, members|
+        ordered = members.select { |doc| !doc.data['order'].nil? }
+        next if ordered.empty?
 
-        toc = members.find { |doc| self.class.segments(doc.data['order']) == [0] }
-        chain = members.reject { |doc| doc == toc }
+        toc = ordered.find { |doc| self.class.segments(doc.data['order']) == [0] }
+        chain = ordered.reject { |doc| doc == toc }
         chain.sort_by! { |doc| self.class.segments(doc.data['order']) }
 
         chain.each_index do |i|
@@ -59,8 +73,13 @@ module Jekyll
           doc.data['parent'] = parent if parent
         end
 
-        # order: 0 root page: list every chapter member.
-        toc.data['toc_html'] = self.class.toc_html_of(site, chain) if toc
+        sections = Jekyll::CategoryList.child_categories(site, category).map { |_id, page| page }
+
+        if toc
+          # order: 0 root page: list every chapter member, then the sub categories.
+          toc.data['toc_html'] = self.class.toc_html_of(site, chain, sections)
+          self.class.link_parent_category(site, category, toc)
+        end
 
         # Any prefix document: list the descendants it contains.
         chain.each do |doc|
@@ -71,13 +90,50 @@ module Jekyll
       end
     end
 
+    # A document with several categories and an order can only sit in one
+    # chain; say so instead of silently dropping it from the others.
+    def warn_ambiguous_chain(doc, primary, others)
+      return if others.empty? || doc.data['order'].nil?
+
+      path = doc.respond_to?(:relative_path) ? doc.relative_path : doc['path']
+      Jekyll.logger.warn "CategoryOrder:",
+                         "#{path} declares several categories; it joins the " \
+                         "'#{primary}' chapter only (also declares: #{others.join(', ')})"
+    end
+
+    # Sub category root: "Back to parent" points at the parent category page.
+    def self.link_parent_category(site, category, doc)
+      return if doc.nil? || doc.data['parent']
+
+      parent_id = Jekyll::PluginUtils.category_parent(category)
+      return if parent_id.nil?
+
+      page = Jekyll::CategoryList.category_page_for(site, parent_id)
+      doc.data['parent'] = page if page
+    end
+
     # Normalise an order value into integer segments:
     # 2 -> [2], "2.2.1" -> [2, 2, 1], 2.0 -> [2].
     def self.segments(order)
       Jekyll::PluginUtils.order_segments(order)
     end
 
-    def self.toc_html_of(site, docs)
+    # Table of contents for a chapter root: the numbered members followed by one
+    # entry per sub category.
+    def self.toc_html_of(site, docs, sections = [])
+      numbered = docs.empty? ? '' : render_list(build_tree(toc_items(site, docs)))
+      extra = sections.map do |page|
+        %(<li class="toc-category"><a href="#{CGI.escapeHTML(absolute_url(site, page))}">) +
+          "#{CGI.escapeHTML(page.data['title'].to_s)}</a></li>"
+      end
+
+      return numbered if extra.empty?
+      return "<ul>#{extra.join}</ul>" if numbered.empty?
+
+      numbered.sub(%r!</ul>\s*\z!, "#{extra.join}</ul>")
+    end
+
+    def self.toc_items(site, docs)
       items = docs.map do |doc|
         seg = segments(doc.data['order'])
         {
@@ -88,7 +144,7 @@ module Jekyll
         }
       end
       items.sort_by! { |i| i[:seg] }
-      render_list(build_tree(items))
+      items
     end
 
     # Jekyll's page URLs do not include baseurl; add it for project pages.

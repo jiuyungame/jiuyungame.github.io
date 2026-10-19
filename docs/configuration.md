@@ -53,11 +53,16 @@ provides the `{% include_author file.html %}` tag.
 
 ### CategoryList (`_plugins/CategoryList.rb`)
 
-Adds a member list to site-root category pages (`<category>.md`). The list
-contains pages under `<category>/` (ordered by `order` when set, by path
-otherwise) and posts whose categories match (newest first), linked by title.
-Disable it per page with `category_list: false`, or place
-`{% category_list %}` / `{% category_list guides %}` manually.
+Adds a member list to category pages. A category page is the page whose path
+without its extension is a category id: `guides.md` hosts `guides`,
+`guides/advanced.md` hosts `guides/advanced`. Author provided category pages
+(`category_page: true`) count as well, even though the mirror writes them.
+
+The list contains the direct sub categories first, then the pages directly under
+`<category>/` (ordered by `order` when set, by path otherwise) and the posts
+whose categories match (newest first), linked by title. Deeper pages are not
+repeated in the parent list. Disable it per page with `category_list: false`, or
+place `{% category_list %}` / `{% category_list guides/advanced %}` manually.
 
 ### CategoryOrder (`_plugins/CategoryOrder.rb`)
 
@@ -69,10 +74,17 @@ neighbours (the post layout also renders them through `page-nav.html`). The
 rendered page navigation comes from `_includes/page-nav.html`; the table of
 contents from `page.toc_html` in the page/article layouts.
 
+A document joins exactly one chain — its primary category, the deepest one it
+declares — so a page with several categories cannot receive conflicting
+previous/next data. The root's table of contents ends with one entry per direct
+sub category, and the root of a sub category links back to its parent category
+page. Category pages are navigation hubs and never join a chain.
+
 ### DefaultLicense (`_plugins/DefaultLicense.rb`)
 
 Lets `layout: article` pages inherit the `license` of their chapter root
-(`order: 0` page of the same category).
+(`order: 0` page of the same category). A sub category with no root of its own
+inherits from its parent category.
 
 ### Recent (`_plugins/Recent.rb`)
 
@@ -94,7 +106,11 @@ Collects pages with a numeric `main_part` front matter value into
 ### PluginUtils (`_plugins/PluginUtils.rb`)
 
 Shared helper that normalises `categories` and `tags` values, so both
-`[a, b]` and the space separated `a b` form work everywhere.
+`[a, b]` and the space separated `a b` form work everywhere. It is also the one
+place that defines what a valid category id is: slash separated segments, folded
+repeated separators, backslashes treated as separators, reserved names and
+Windows-invalid characters rejected, plus the helpers for parent, ancestors,
+depth and the primary category of a document.
 
 ## Build pipeline
 
