@@ -1,16 +1,21 @@
 ---
 layout: home
-title: "Jekyll Authors Template"
 ---
 
-A multi-author blog and wiki starter for Jekyll. Every author writes in their own
-folder under `authors-src/`; the plugins in `_plugins/` merge those folders into
-the site at build time.
+![]({{ '/assets/wiki/%E8%83%8C%E6%99%AF%E5%9B%BE.jpeg' | relative_url }})
 
-Pages can join a category by adding `categories:` to their front matter. Category
-pages list their members automatically, ordered pages get previous/next
-navigation and a table of contents, and tags, feeds and a "Recently updated"
-sidebar are generated for you.
+# 九云游戏开发社首页
 
-Read the [about page]({{ '/about.html' | relative_url }}) for an overview, then
-open `README.md` and `docs/` in the repository for the full documentation.
+![]({{ '/assets/wiki/%E4%B9%9D%E4%BA%91%E6%B8%B8%E6%88%8F%E5%BC%80%E5%8F%91%E7%A4%BE%E5%9B%BE%E6%A0%87.png' | relative_url }})
+
+# 愿景和目标
+
+> 九云游戏开发社致力于打造成山西地区最大的游戏开发者交流社群，吸纳更多的年轻人加入我们，共同探讨游戏设计与开发的技术和创新
+
+# 网站简介
+
+> 本网站创立于2026/9/16，旨在分享游戏制作相关知识以及学习资源等
+
+# 知识库帮助
+
+> 本知识库秉持开放原则，所有人具有阅读权限。通过目录可以寻找所需内容，也可使用搜索功能直接检索所需部分。

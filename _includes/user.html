@@ -1,0 +1,39 @@
+{%- comment -%}
+一张成员卡片。作者在自己页面里这样展示自己：
+
+  {% include user.html
+     name="张三" cohort="26届" role="社员"
+     note="爱做像素游戏" avatar="张三.jpg"
+     links="社交账号|https://space.bilibili.com/xxx" %}
+
+除 name 外都可省略；links 用 ; 分隔多个，每个是「标签|URL」。
+头像只写文件名时按 assets/wiki/ 查找。要让整页排成卡片网格，
+在页面的 front matter 里加 user_grid: true。
+{%- endcomment -%}
+{%- assign avatar = "" -%}
+{%- if include.avatar -%}
+  {%- assign avatar = include.avatar -%}
+  {%- unless avatar contains "/" -%}
+    {%- assign avatar = "/assets/wiki/" | append: avatar -%}
+  {%- endunless -%}
+{%- endif -%}
+<article class="user-card">
+  {%- if avatar != "" %}
+  <img class="user-avatar" src="{{ avatar | relative_url }}" alt="" width="72" height="72" loading="lazy">{% endif %}
+  <div class="user-body">
+    {%- if include.name %}
+    <h3 class="user-name">{{ include.name | escape }}{% if include.cohort %}<span class="user-cohort">{{ include.cohort | escape }}</span>{% endif %}</h3>{% endif %}
+    {%- if include.role %}
+    <p class="user-role">{{ include.role | escape }}</p>{% endif %}
+    {%- if include.note %}
+    <p class="user-note">{{ include.note | escape }}</p>{% endif %}
+    {%- if include.links %}
+    <p class="user-links">
+      {%- assign entries = include.links | split: ";" -%}
+      {%- for entry in entries -%}
+        {%- assign parts = entry | split: "|" -%}
+      <a href="{{ parts[1] | default: parts[0] | strip }}" target="_blank" rel="noopener noreferrer">{{ parts[0] | strip | escape }}</a>
+      {%- endfor %}
+    </p>{% endif %}
+  </div>
+</article>

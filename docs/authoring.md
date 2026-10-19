@@ -236,6 +236,38 @@ The tag looks in `_includes/<author>/` first and falls back to the shared
 `_includes/` folder. Author folder names must be ASCII slugs for this to work;
 the build logs a warning otherwise.
 
+## Showing yourself on a page
+
+`_includes/user.html` renders one member card. The information lives in the tag
+itself, so any page can show anyone:
+
+```liquid
+{% include user.html
+   name="张三" cohort="26届" role="社员"
+   note="爱做像素游戏" avatar="张三.jpg"
+   links="社交账号|https://space.bilibili.com/xxx" %}
+```
+
+| Parameter | Meaning |
+| --- | --- |
+| `name` | name, shown as the card title |
+| `cohort` | cohort, rendered as a pill after the name |
+| `role` | 社长 / 社团联合创始人 / 社员 … |
+| `note` | one line about yourself |
+| `avatar` | file name under `assets/wiki/`, or a full site path |
+| `links` | one or more links: `标签\|URL`, separated by `;` |
+
+Everything except `name` is optional, so a card can be as short as
+`{% include user.html name="张三" %}`. Values are escaped, links open in a new
+tab, and the avatar falls back gracefully when omitted.
+
+Cards are laid out two per row, falling back to one on a phone. To lay a whole
+page out as a grid (as `九云游戏开发社介绍/英灵殿.md` does), add `user_grid: true`
+to that page's front matter; a card dropped into ordinary body text stays full
+width.
+
+Avoid `|` and `;` inside a parameter value — they are the separators.
+
 ## Posts, tags and drafts
 
 - `_posts/**` is mirrored to `_posts/<author>/**` and behaves like a normal

@@ -110,15 +110,24 @@ module Jekyll
     end
 
     # Category pages link to their parent category page, or to the home page when
-    # they are top level.
+    # they are top level. A section that was merged into a single page is no
+    # longer a category page, so it gets the home link through `main_part`.
     def link_category_pages(site)
+      home = home_page(site) || { 'url' => '/' }
+
       site.pages.each do |page|
         id = Jekyll::CategoryList.hosted_category(page, site)
-        next if id.nil?
+        if id.nil?
+          next if page.data['main_part'].nil? || page.data['parent'] || page.data['root']
+
+          page.data['parent'] = home
+          page.data['parent_label'] = 'Home'
+          next
+        end
 
         parent_id = Jekyll::PluginUtils.category_parent(id)
         if parent_id.nil?
-          page.data['parent'] = home_page(site) || { 'url' => '/' }
+          page.data['parent'] = home
           page.data['parent_label'] = 'Home'
           next
         end

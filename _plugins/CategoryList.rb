@@ -94,7 +94,12 @@ module Jekyll
         return nil if page.nil? || site.nil?
 
         key = category_key(page)
-        index(site)[:pages][key].equal?(page) ? key : nil
+        host = index(site)[:pages][key]
+        return nil if host.nil?
+
+        # The Liquid tag hands us the page drop instead of the page object, so
+        # compare paths rather than object identity.
+        relative_path(host) == relative_path(page) ? key : nil
       end
 
       # Page that hosts the given category, or nil.
@@ -305,11 +310,12 @@ module Jekyll
       end
 
       def doc_url(site, doc)
-        url = doc.respond_to?(:url) ? doc.url : doc["url"]
-        url = url.to_s
+        # `url` is already percent encoded by Jekyll; escaping it again would turn
+        # %E5 into %25E5. link_item only needs HTML escaping.
+        url = (doc.respond_to?(:url) ? doc.url : doc["url"]).to_s
         base = site.respond_to?(:baseurl) ? site.baseurl.to_s : ""
         url = "#{base}#{url}" unless base.empty? || url.start_with?(base)
-        Jekyll::URL.escape_path(url)
+        url
       end
     end
 

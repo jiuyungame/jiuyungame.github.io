@@ -1,22 +1,27 @@
 # ---------------------------------------------------------------------------
 # Site settings
 # ---------------------------------------------------------------------------
-title: "Jekyll Authors Template"
-description: "A multi-author blog and wiki starter for Jekyll."
-lang: en
+title: "九云游戏开发社"
+description: "九云游戏开发社 —— 山西地区的游戏开发者交流社群，共同探讨游戏设计与开发的技术与创新。"
+lang: zh
 
-# Shown in the footer and in SEO tags. Replace with your own details.
-author: "Your Name"
-email: "you@example.com"
+# Shown in the footer and in SEO tags.
+author: "九云游戏开发社"
 
-# Footer social links. `title` is also the Font Awesome brand icon name, e.g.
-# github, x-twitter, mastodon, linkedin, youtube, rss.
+# Site logo, rendered before the title in the header (path from the site root).
+# This is the logo the old Wiki.js site used (its `logoUrl` setting): the 社娘
+# mascot, transparent PNG. assets/wiki/九云游戏开发社图标.png is the emblem used
+# inside the home page content.
+logo: "/assets/wiki/sheniang-favicon.png"
+
+# Footer links. `title` is also the Font Awesome brand icon name, e.g.
+# github, bilibili, x-twitter, mastodon, youtube, rss, weixin.
 social_links:
-  - title: github
-    url: "https://github.com/yourname"
+  - title: bilibili
+    url: "https://space.bilibili.com/3493295604894282"
 
 # Footer license line (a page-level `license` front matter value overrides it).
-license: "© Your Name. Licensed under CC BY 4.0."
+license: "© 九云游戏开发社"
 
 # Project pages usually need a baseurl, e.g. "/my-repo". Leave it empty for
 # user / organisation pages (https://<name>.github.io).
@@ -24,7 +29,7 @@ license: "© Your Name. Licensed under CC BY 4.0."
 # url: "https://example.com"
 
 # Posts use category based URLs: /<category>/<title>.html
-# Pages keep their path: /authors/alice.html, /guides/setup.html, ...
+# Pages keep their path: /九云游戏开发社介绍/学期活动.html, ...
 permalink: /:categories/:title:output_ext
 
 plugins:
@@ -41,9 +46,11 @@ authors:
 
 # Top navigation (paths relative to the site root).
 header_pages:
-  - about.md
-  - guides.md
-  - author.md
+  - 九云游戏开发社介绍.md
+  - 游戏开发技能.md
+  - 社课教学资料.md
+  - 社员作品.md
+  - 友情链接.md
 
 date_format: "%B %-d, %Y"
 
