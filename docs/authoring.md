@@ -9,7 +9,7 @@ folder, and the plugins mirror it into the site at build time.
 | Who | Where |
 | --- | --- |
 | Authors | `authors-src/<author>/` |
-| Site owner | top level category pages (`author.md`, `guides.md`, ...), `index.html`, `about.md`, `_config.yml`, `docs/` |
+| Site owner | top level category pages (`author.md`, `guides.md`, ...), `index.md`, `about.md`, `_config.yml`, `docs/` |
 | Either | sub category pages such as `guides/advanced.md`; the owner commits them, or an author provides one with `category_page: true` |
 
 ## Author folder anatomy
@@ -244,4 +244,4 @@ Any file that is not a page with front matter (images, PDFs, ...) is mirrored to
 2. Delete `guides/overview.md`.
 3. Remove or rename `author.md`, `guides.md`, `blog.md` and update `header_pages`
    in `_config.yml`.
-4. Replace the text in `index.html` and `about.md`.
+4. Replace the text in `index.md` and `about.md`.

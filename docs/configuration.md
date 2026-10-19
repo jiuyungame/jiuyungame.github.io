@@ -100,8 +100,8 @@ that uses the tag.
 ### MainPart (`_plugins/MainPart.rb`)
 
 Collects pages with a numeric `main_part` front matter value into
-`site.data.main_part_page`, ordered descending. `index.html` uses it for the
-"Sections" list.
+`site.data.main_part_page`, ordered descending. `_layouts/home.html` uses it for
+the "Sections" list, so the home page itself stays plain Markdown.
 
 ### PluginUtils (`_plugins/PluginUtils.rb`)
 

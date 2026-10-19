@@ -8,4 +8,13 @@ layout: default
   {% endif %}
 
   {{ content }}
+
+  {% if site.data["main_part_page"] %}
+  <h2>Sections</h2>
+  <ul>
+  {% for section in site.data["main_part_page"] %}
+    <li><a href="{{ section.url | relative_url }}">{{ section.title }}</a></li>
+  {% endfor %}
+  </ul>
+  {% endif %}
 </div>

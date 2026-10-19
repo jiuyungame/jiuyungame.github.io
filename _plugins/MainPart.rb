@@ -1,7 +1,7 @@
 module Jekyll
   # Collects the pages that declare a numeric `main_part` front matter value and
   # exposes them as site.data['main_part_page'], ordered by that value
-  # descending. index.html uses the list to show the site's main sections.
+  # descending. _layouts/home.html uses the list for the "Sections" block.
   class MainPart < Generator
     safe true
 
