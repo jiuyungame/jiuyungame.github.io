@@ -28,8 +28,10 @@ module Jekyll
   #     rendered by _includes/page-nav.html; the table of contents is rendered by
   #     the layouts from page.toc_html.
   #
-  # Category pages are navigation hubs, not chapter members: they are skipped
-  # here and never receive prev/next/root/toc data.
+  # Category pages are navigation hubs, not chapter members: the chain logic
+  # skips them, so they never receive prev/next/root/toc data. They only get a
+  # data['parent'] link to their parent category page (or to the home page when
+  # top level); every other document gets data['root'] pointing one level up.
   #
   # Category pages also use the order when listing their members, see
   # _plugins/CategoryList.rb.
@@ -88,6 +90,47 @@ module Jekyll
           doc.data['toc_html'] = self.class.toc_html_of(site, descendants) unless descendants.empty?
         end
       end
+
+      link_up(site)
+      link_category_pages(site)
+    end
+
+    # Every document links back up to its category page: the chapter root when the
+    # category has one (the chain logic above already set it), otherwise the
+    # category page itself. Posts never have a chapter root.
+    def link_up(site)
+      (site.pages + site.posts.docs).each do |doc|
+        next if Jekyll::CategoryList.category_page?(doc, site)
+
+        page = Jekyll::CategoryList.parent_category_page(site, doc)
+        next if page.nil?
+
+        doc.data['root'] ||= page
+      end
+    end
+
+    # Category pages link to their parent category page, or to the home page when
+    # they are top level.
+    def link_category_pages(site)
+      site.pages.each do |page|
+        id = Jekyll::CategoryList.hosted_category(page, site)
+        next if id.nil?
+
+        parent_id = Jekyll::PluginUtils.category_parent(id)
+        if parent_id.nil?
+          page.data['parent'] = home_page(site) || { 'url' => '/' }
+          page.data['parent_label'] = 'Home'
+          next
+        end
+
+        parent_page = Jekyll::CategoryList.category_page_for(site, parent_id)
+        page.data['parent'] = parent_page unless parent_page.nil?
+      end
+    end
+
+    # The home page, used as the parent of a top level category page.
+    def home_page(site)
+      site.pages.find { |page| page.url.to_s == '/' }
     end
 
     # A document with several categories and an order can only sit in one

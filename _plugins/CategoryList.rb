@@ -66,6 +66,14 @@ module Jekyll
         site.include = (Array(site.include) + files).uniq
       end
 
+      # Drop the memoised index. Jekyll reuses the Site object for `jekyll serve`
+      # rebuilds but recreates every page object, so a cached index would keep
+      # pointing at the previous build's pages and every identity check would
+      # fail on the second build.
+      def reset_index
+        @index = nil
+      end
+
       # Categories in use for the current build, memoised per site.
       # { :ids => [category id, ...], :pages => { category id => page } }
       def index(site)
@@ -78,9 +86,15 @@ module Jekyll
 
       # True when this page hosts a category.
       def category_page?(page, site)
-        return false if page.nil? || site.nil?
+        !hosted_category(page, site).nil?
+      end
 
-        index(site)[:pages][category_key(page)].equal?(page)
+      # Category id this page hosts, or nil when the page is not a category page.
+      def hosted_category(page, site)
+        return nil if page.nil? || site.nil?
+
+        key = category_key(page)
+        index(site)[:pages][key].equal?(page) ? key : nil
       end
 
       # Page that hosts the given category, or nil.
@@ -89,6 +103,26 @@ module Jekyll
         return nil if id.nil?
 
         index(site)[:pages][id]
+      end
+
+      # Category page a document belongs under: the first declared category that
+      # has a category page, in declaration order. Used for the "back up" link.
+      def parent_category_page(site, doc)
+        return nil if site.nil? || doc.nil?
+
+        data = doc.respond_to?(:data) ? doc.data : doc
+        raw = data["categories"]
+        raw = data["category"] if raw.nil?
+        pages = index(site)[:pages]
+
+        Jekyll::PluginUtils.normalize_list(raw).each do |value|
+          id = Jekyll::PluginUtils.category_normalize(value)
+          next if id.nil?
+
+          page = pages[id]
+          return page unless page.nil?
+        end
+        nil
       end
 
       # Direct sub categories of a category as [id, page] pairs, in chapter
@@ -299,6 +333,7 @@ end
 Liquid::Template.register_tag("category_list", Jekyll::CategoryList::Tag)
 
 Jekyll::Hooks.register :site, :after_reset do |site|
+  Jekyll::CategoryList.reset_index
   Jekyll::CategoryList.allow_listing_pages(site)
 end
 

@@ -87,6 +87,13 @@ previous/next data. The root's table of contents ends with one entry per direct
 sub category, and the root of a sub category links back to its parent category
 page. Category pages are navigation hubs and never join a chain.
 
+The generator also fills the "up" links used by `_includes/page-nav.html` and the
+page/article/post layouts: every document gets `page.root` pointing at its
+chapter root, or at its category page when the category has no chapter root
+(posts included); every category page gets `page.parent` pointing at its parent
+category page, or at the home page when it is top level. See "Up links" in
+`docs/authoring.md` for the full table.
+
 ### DefaultLicense (`_plugins/DefaultLicense.rb`)
 
 Lets `layout: article` pages inherit the `license` of their chapter root

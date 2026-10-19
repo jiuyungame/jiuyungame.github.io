@@ -204,6 +204,26 @@ single valued previous/next data unambiguous.
 `_plugins/CategoryOrder.rb` implements the ordering and chapter navigation,
 `_plugins/DefaultLicense.rb` the license inheritance.
 
+## Up links
+
+Every page that belongs to a category gets exactly one "back up" link, at the
+top of the article or at the bottom of the page. The link text names its target:
+`☰ Back to Guides`, `☰ Back to Overview`, `☰ Back to Home`.
+
+| Page | Link | Points at |
+| --- | --- | --- |
+| ordered member (`order: 1`) | Back to *chapter root title* | the chapter root page |
+| ordered sub page (`order: 1.1`) | Back to *root*, plus Back to *order parent* | root page and the order parent |
+| member without `order` | Back to *category page title* | the category page |
+| post | Back to *category page title* | its category page, e.g. `/_posts.html` |
+| chapter root (`order: 0`) | Back to *category page title* | the category page |
+| sub category page | Back to *parent category page title* | the parent category page |
+| top level category page | Back to Home | `/` |
+
+Pages that belong to no category (`about.md`, `index.md`, tag pages, the
+uncategorised fallback pages, `404.html`) get no up link. When a page has both a
+`root` and a `parent` pointing at the same URL, only one link is rendered.
+
 ## Per-author includes
 
 Put reusable partials in `<author>/_includes/` and include them with:

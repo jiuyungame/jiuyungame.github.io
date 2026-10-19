@@ -2,7 +2,13 @@
 layout: default
 ---
 <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
-  
+
+  {% if page.root %}
+  <div class="page-nav-root">
+    <a href="{{ page.root.url | relative_url }}">☰ Back to {{ page.root.title | default: "category" }}</a>
+  </div>
+  {% endif %}
+
   {% include fullpage-header.html %}
 
   <div class="fullpage-content e-content" itemprop="articleBody">

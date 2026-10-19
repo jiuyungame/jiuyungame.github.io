@@ -1,9 +1,17 @@
 {% assign nav_prev = page.prev | default: page.previous %}
 {% assign nav_next = page.next %}
-{% if nav_prev or nav_next or page.parent %}
+{% assign show_upper = false %}
+{% if page.parent %}
+  {% if page.root %}
+    {% unless page.parent.url == page.root.url %}{% assign show_upper = true %}{% endunless %}
+  {% else %}
+    {% assign show_upper = true %}
+  {% endif %}
+{% endif %}
+{% if nav_prev or nav_next or show_upper %}
 <nav class="page-nav" aria-label="Page navigation">
-  {% if page.parent %}
-  <a class="page-nav-upper" href="{{ page.parent.url | relative_url }}">☰ Back to parent</a>
+  {% if show_upper %}
+  <a class="page-nav-upper" href="{{ page.parent.url | relative_url }}">☰ Back to {{ page.parent_label | default: page.parent.title | default: "parent" }}</a>
   {% endif %}
   {% if nav_prev or nav_next %}
   <div class="page-nav-row">
