@@ -234,7 +234,9 @@ module Jekyll
           return [{ :target => target, :category => nil }]
         end
 
-        if !plan.nil? && Jekyll::PluginUtils.category_page_flag?(data)
+        if !plan.nil?
+          # `plan[:accepted]` holds both explicit `category_page: true` files and
+          # members promoted to a category page by promote_category_pages.
           key = posix_join(author, rel)
           id = plan[:accepted][key]
           if id
@@ -242,8 +244,10 @@ module Jekyll
                       :category_page => id }]
           end
 
-          (report[:cp_fallback] ||= {})[key] = true
-          return fallback
+          if Jekyll::PluginUtils.category_page_flag?(data)
+            (report[:cp_fallback] ||= {})[key] = true
+            return fallback
+          end
         end
 
         categories = categories_of(data, report)
@@ -455,6 +459,8 @@ module Jekyll
           plan[:usable][id] = true
         end
 
+        promote_category_pages(entries, site, previous, plan, report)
+
         # A declared category is only usable when a category page exists for it:
         # either the owner's file or an author provided one.
         plan[:usable].delete_if do |id, _flag|
@@ -475,6 +481,68 @@ module Jekyll
         end
 
         plan
+      end
+
+      # A member lands on "<declared category>/<title>.md". When that path is
+      # exactly where the page of a sub category belongs, the member *is* that
+      # sub category's page — no `category_page: true` needed:
+      #
+      #   authors/alice/1.md   categories: [docs], title: 1
+      #     -> docs/1.md      = the page of the category "docs/1"
+      #   authors/alice/2.md   categories: [docs/1]
+      #     -> docs/1/2.md
+      #
+      # Only a category somebody really declares needs a page, so a title that
+      # merely looks like a folder never turns a page into a category page.
+      def promote_category_pages(entries, site, previous, plan, report)
+        promoted = {}
+        loop do
+          added = false
+
+          entries.each do |entry|
+            next unless entry[:data].is_a?(Hash)
+            next if special_dir?(entry[:rel])
+            next if Jekyll::PluginUtils.category_page_flag?(entry[:data])
+            # An ordered page keeps its place in the chapter chain.
+            next unless entry[:data]["order"].nil?
+
+            key = posix_join(entry[:author], entry[:rel])
+            next if plan[:accepted].key?(key)
+
+            slug = title_slug(entry[:data], entry[:rel], site)
+            next if slug.nil? || slug.empty?
+
+            categories_of(entry[:data]).each do |raw|
+              id = Jekyll::PluginUtils.category_normalize(raw)
+              next if id.nil? || !Jekyll::PluginUtils.category_valid?(id)
+              next unless plan[:usable].key?(id)
+
+              page_id = posix_join(id, slug)
+              next unless plan[:usable].key?(page_id)
+              next if Jekyll::PluginUtils.category_depth(page_id) < 2
+              next unless owner_category_page_rel(site, page_id, previous).nil?
+
+              if (claimed = plan[:claims][page_id])
+                # Another author got there first; say so instead of falling back
+                # to authors/<author>/... without a word.
+                (report[:cp_duplicate] ||= {})[page_id] = claimed[:author]
+                next
+              end
+
+              plan[:claims][page_id] = entry
+              plan[:accepted][key] = page_id
+              plan[:usable][page_id] = true
+              promoted[key] = page_id
+              added = true
+              break
+            end
+          end
+
+          break unless added
+        end
+
+        (report[:cp_auto] ||= {}).merge!(promoted) unless promoted.empty?
+        promoted
       end
 
       # _posts/, _drafts/ and friends: `category_page` does not apply there.
@@ -833,6 +901,13 @@ module Jekyll
           Jekyll.logger.warn "Authors:",
                              "Copies skipped because the target is a category page: " \
                              "#{shadowed.first(3).join(', ')}"
+        end
+
+        promoted = (report[:cp_auto] || {})
+        unless promoted.empty?
+          shown = promoted.first(3).map { |rel, id| "#{rel} -> #{id}" }.join(", ")
+          Jekyll.logger.info "Authors:",
+                             "Page(s) serving as their category page: #{shown}"
         end
       end
 
